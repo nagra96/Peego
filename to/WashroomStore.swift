@@ -17,10 +17,18 @@ final class WashroomStore: ObservableObject {
     @Published var favoriteIDs: Set<UUID>
     @Published var filter = FilterSettings()
     @Published var searchText = ""
+    @Published var currentLocation: CLLocation?
 
-    /// Simulated user position (downtown Vancouver) so distances work in the
-    /// simulator without location permissions.
-    let userLocation = CLLocation(latitude: 49.2827, longitude: -123.1207)
+    let locationManager = LocationManager()
+
+    /// Used until the first real fix arrives (and in the simulator with no
+    /// location set), so distances are never blank.
+    private let fallbackLocation = CLLocation(latitude: 49.2827, longitude: -123.1207)
+
+    /// The user's real position when available, otherwise the fallback.
+    var userLocation: CLLocation { currentLocation ?? fallbackLocation }
+
+    var isUsingRealLocation: Bool { currentLocation != nil }
 
     private static let favoritesKey = "peego.favorites"
     private static let userWashroomsKey = "peego.userWashrooms"
@@ -48,6 +56,14 @@ final class WashroomStore: ObservableObject {
         } else {
             favoriteIDs = [SampleData.timHortonsID, SampleData.walmartID]
         }
+
+        // Mirror the manager's fixes onto the store so distance-sorted views
+        // refresh as the user moves. assign(to:) captures no self.
+        locationManager.$currentLocation.assign(to: &$currentLocation)
+    }
+
+    func requestLocationPermission() {
+        locationManager.requestPermission()
     }
 
     // MARK: - Derived data
@@ -93,13 +109,11 @@ final class WashroomStore: ObservableObject {
         washrooms.sorted { distanceKM(to: $0) < distanceKM(to: $1) }
     }
 
-    /// Washrooms matching the active search text and filter settings, nearest first.
+    /// Washrooms matching the active filter settings, nearest first. Search text
+    /// deliberately does not narrow this — searching moves the map instead, so
+    /// pins stay visible in whatever area you land on.
     var filteredWashrooms: [Washroom] {
         sortedByDistance.filter { washroom in
-            if !searchText.isEmpty,
-               !washroom.name.localizedCaseInsensitiveContains(searchText) {
-                return false
-            }
             if distanceKM(to: washroom) > filter.maxDistanceKM { return false }
             return filter.amenities.allSatisfy { washroom.amenities.contains($0) }
         }
@@ -119,6 +133,12 @@ final class WashroomStore: ObservableObject {
 
     func washroom(id: UUID) -> Washroom? {
         washrooms.first { $0.id == id }
+    }
+
+    /// A saved washroom whose name matches the query, so searching a known
+    /// place jumps straight to it instead of round-tripping to MapKit.
+    func firstWashroomMatching(_ query: String) -> Washroom? {
+        sortedByDistance.first { $0.name.localizedCaseInsensitiveContains(query) }
     }
 
     // MARK: - Mutations
@@ -199,14 +219,22 @@ final class NetworkMonitor: ObservableObject {
     @Published var isOnline = true
 
     private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "peego.network.monitor")
 
     init() {
+        startMonitoring()
+    }
+
+    // Handler setup lives outside init: inside an initializer `self` is still a
+    // var, and capturing a var in concurrently-executing code is an error in
+    // the Swift 6 language mode.
+    private func startMonitoring() {
         monitor.pathUpdateHandler = { [weak self] path in
             let online = path.status == .satisfied
             Task { @MainActor in
                 self?.isOnline = online
             }
         }
-        monitor.start(queue: DispatchQueue(label: "peego.network.monitor"))
+        monitor.start(queue: queue)
     }
 }

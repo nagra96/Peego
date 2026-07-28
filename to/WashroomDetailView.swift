@@ -3,11 +3,13 @@
 //  Peego
 //
 
+import Foundation
+import CoreLocation
 import SwiftUI
-import MapKit
 
 struct WashroomDetailView: View {
     @EnvironmentObject private var store: WashroomStore
+    @Environment(\.openURL) private var openURL
     let washroom: Washroom
 
     @State private var showAddReview = false
@@ -105,13 +107,22 @@ struct WashroomDetailView: View {
         }
     }
 
+    // Built as a Maps URL rather than an MKMapItem: MKPlacemark and
+    // MKMapItem(placemark:) are both deprecated in iOS 26, and their
+    // replacements are iOS 26-only, so either branch of an availability check
+    // would warn on this deployment target. The URL scheme is stable on all of
+    // them.
     private func openDirections() {
-        let placemark = MKPlacemark(coordinate: washroom.coordinate)
-        let item = MKMapItem(placemark: placemark)
-        item.name = washroom.name
-        item.openInMaps(launchOptions: [
-            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
-        ])
+        let coordinate = washroom.coordinate
+        var components = URLComponents(string: "https://maps.apple.com/")
+        components?.queryItems = [
+            URLQueryItem(name: "daddr", value: "\(coordinate.latitude),\(coordinate.longitude)"),
+            URLQueryItem(name: "q", value: washroom.name),
+            URLQueryItem(name: "dirflg", value: "w"),
+        ]
+        if let url = components?.url {
+            openURL(url)
+        }
     }
 }
 
