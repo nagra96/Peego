@@ -13,15 +13,15 @@ import MapKit
 struct MapScreen: View {
     @EnvironmentObject private var store: WashroomStore
 
+    private static let fallbackRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 49.2827, longitude: -123.1207),
+        span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+    )
+
     // .userLocation follows the user once authorized — this is what makes the
     // blue dot track — and falls back to downtown Vancouver until then.
     @State private var position: MapCameraPosition = .userLocation(
-        fallback: .region(
-            MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: 49.2827, longitude: -123.1207),
-                span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
-            )
-        )
+        fallback: .region(MapScreen.fallbackRegion)
     )
     @State private var selectedID: UUID?
     @State private var showFilters = false
@@ -31,47 +31,55 @@ struct MapScreen: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .top) {
-                map
+            map
+                // A safeAreaInset (rather than a ZStack overlay) is what keeps
+                // MapKit's own controls from sliding under the search bar.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    VStack(spacing: 8) {
+                        searchBar
 
-                VStack(spacing: 8) {
-                    searchBar
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
-
-                    if let searchMessage {
-                        Text(searchMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Theme.card, in: Capsule())
-                            .shadow(color: .black.opacity(0.08), radius: 4, y: 1)
+                        if let searchMessage {
+                            Text(searchMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Theme.card, in: Capsule())
+                                .shadow(color: .black.opacity(0.08), radius: 4, y: 1)
+                        }
                     }
-
-                    Spacer()
-
-                    if let selected = selectedID.flatMap(store.washroom(id:)) {
-                        selectedCard(for: selected)
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 12)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
                 }
-            }
-            .navigationTitle("Find Washrooms")
-            .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showFilters) {
-                FilterView()
-                    .presentationDetents([.large])
-            }
-            .navigationDestination(for: Washroom.self) { washroom in
-                WashroomDetailView(washroom: washroom)
-            }
-            .animation(.snappy, value: selectedID)
-            .animation(.snappy, value: searchMessage)
-            .onAppear { store.requestLocationPermission() }
-            .onDisappear { searchTask?.cancel() }
+                .overlay(alignment: .bottom) {
+                    VStack(spacing: 12) {
+                        HStack {
+                            Spacer()
+                            locateButton
+                        }
+
+                        if let selected = selectedID.flatMap(store.washroom(id:)) {
+                            selectedCard(for: selected)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                }
+                .navigationTitle("Find Washrooms")
+                .navigationBarTitleDisplayMode(.inline)
+                .sheet(isPresented: $showFilters) {
+                    FilterView()
+                        .presentationDetents([.large])
+                }
+                .navigationDestination(for: Washroom.self) { washroom in
+                    WashroomDetailView(washroom: washroom)
+                }
+                .animation(.snappy, value: selectedID)
+                .animation(.snappy, value: searchMessage)
+                .onAppear { store.requestLocationPermission() }
+                .onDisappear { searchTask?.cancel() }
         }
     }
 
@@ -85,10 +93,27 @@ struct MapScreen: View {
                     .tag(washroom.id)
             }
         }
+        // MapUserLocationButton would land in MapKit's top-trailing slot, under
+        // the filter button. The purple locate button below replaces it.
         .mapControls {
-            MapUserLocationButton()
             MapCompass()
         }
+    }
+
+    private var locateButton: some View {
+        Button {
+            withAnimation {
+                position = .userLocation(fallback: .region(Self.fallbackRegion))
+            }
+        } label: {
+            Image(systemName: "location.fill")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(Theme.purple, in: Circle())
+                .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
+        }
+        .accessibilityLabel("Center on my location")
     }
 
     private var searchBar: some View {
