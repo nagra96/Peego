@@ -1,17 +1,15 @@
 //
 //  toApp.swift
-//  to
-//
-//  Created by RAJVIR KAUR on 2025-09-13.
+//  Peego — Pregnant Washroom Finder
 //
 
 import SwiftUI
 
 @main
-struct toApp: App {
+struct PeegoApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
         }
     }
 }
