@@ -203,7 +203,7 @@ final class NetworkMonitor: ObservableObject {
     init() {
         monitor.pathUpdateHandler = { [weak self] path in
             let online = path.status == .satisfied
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self?.isOnline = online
             }
         }

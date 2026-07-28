@@ -5,6 +5,7 @@
 //  Shared building blocks: logo, stars, chips, rows.
 //
 
+import Foundation
 import SwiftUI
 
 // MARK: - Logo
@@ -60,7 +61,8 @@ struct StarRatingView: View {
                     .foregroundStyle(Theme.starYellow)
             }
         }
-        .accessibilityLabel("\(rating, specifier: "%.1f") out of 5 stars")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(format: "%.1f out of 5 stars", rating))
     }
 
     private func symbol(for star: Int) -> String {
